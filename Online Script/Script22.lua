@@ -1351,6 +1351,7 @@ LeaderboardToggle = Tabs.Main:AddButton({
         local starterGui = game:GetService("StarterGui")
         local TweenService = game:GetService("TweenService")
         local UserInputService = game:GetService("UserInputService")
+        local VirtualUser = game:GetService("VirtualUser")
 
         local playerGui = player:WaitForChild("PlayerGui")
         if playerGui:FindFirstChild("CustomTopGui") then
@@ -1395,7 +1396,7 @@ LeaderboardToggle = Tabs.Main:AddButton({
         uiListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
         uiListLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 
-        -- Исправлены ключи (Key), чтобы совпадали с настройками игры
+        -- ★ Теперь мы эмулируем РЕАЛЬНЫЕ клавиши, а не шлем строки на сервер
         local buttonsConfig = {
             {
                 name = "SecondaryButton",
@@ -1404,7 +1405,7 @@ LeaderboardToggle = Tabs.Main:AddButton({
                 label = "Zoom",
                 width = 100,
                 labelWidth = 45,
-                key = "Secondary"
+                keyCode = Enum.KeyCode.Z -- Кнопка Z (Прицел)
             },
             {
                 name = "ReloadButton",
@@ -1413,7 +1414,7 @@ LeaderboardToggle = Tabs.Main:AddButton({
                 label = "Front View / View",
                 width = 173,
                 labelWidth = 118,
-                key = "Reload"
+                keyCode = Enum.KeyCode.V -- Кнопка V (Вид от первого лица / Смена плеча)
             },
             {
                 name = "LeaderboardButton",
@@ -1422,13 +1423,9 @@ LeaderboardToggle = Tabs.Main:AddButton({
                 label = "Leaderboard",
                 width = 143,
                 labelWidth = 88,
-                key = "Leaderboard"
+                keyCode = Enum.KeyCode.Tab -- Кнопка Tab (Таблица лидеров)
             }
         }
-
-        -- Получаем правильный RemoteEvent для нажатий
-        local Events = game:GetService("ReplicatedStorage"):FindFirstChild("Events")
-        local ActionRemote = Events and Events:FindFirstChild("Action")
 
         for _, config in ipairs(buttonsConfig) do
             local tweenInfo = TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -1514,7 +1511,6 @@ LeaderboardToggle = Tabs.Main:AddButton({
             UICorner_3.CornerRadius = UDim.new(1, 0)
             UICorner_3.Parent = IconOverlay
 
-            -- ★ ИСПРАВЛЕНИЕ ДЛЯ ТЕЛЕФОНА (TextButton + Active)
             local ClickRegion = Instance.new("TextButton")
             ClickRegion.Name = "ClickRegion"
             ClickRegion.Parent = IconSpot
@@ -1685,55 +1681,39 @@ LeaderboardToggle = Tabs.Main:AddButton({
                 hideTextWithDelay()
             end
 
-            -- ★ Логика нажатия для ПК
+            -- ★ НОВАЯ ЛОГИКА: Эмуляция нажатия клавиш (работает и на ПК, и на телефоне)
+            local function simulateKeyPress()
+                if VirtualUser and UserInputService then
+                    -- Для ПК: эмулируем нажатие клавиши
+                    pcall(function()
+                        keypress(config.keyCode)
+                        task.wait(0.1)
+                        keyrelease(config.keyCode)
+                    end)
+                    
+                    -- Для мобилки: эмулируем нажатие через виртуальные кнопки
+                    pcall(function()
+                        VirtualUser:Button1Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                        task.wait(0.1)
+                        VirtualUser:Button1Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+                    end)
+                end
+            end
+
             ClickRegion.MouseEnter:Connect(expand)
             ClickRegion.MouseLeave:Connect(function()
                 contract()
-                if ActionRemote then
-                    pcall(function() ActionRemote:FireServer(config.key, false) end)
-                end
             end)
 
-            ClickRegion.MouseButton1Down:Connect(function()
-                if ActionRemote then
-                    pcall(function() ActionRemote:FireServer(config.key, true) end)
-                end
+            ClickRegion.MouseButton1Click:Connect(function()
+                simulateKeyPress()
             end)
 
-            ClickRegion.MouseButton1Up:Connect(function()
-                if ActionRemote then
-                    pcall(function() ActionRemote:FireServer(config.key, false) end)
-                end
-            end)
-
-            -- ★ Логика нажатия для ТЕЛЕФОНА (Touch)
             ClickRegion.TouchTap:Connect(function()
-                -- Имитируем нажатие и отпускание
-                if ActionRemote then
-                    pcall(function() ActionRemote:FireServer(config.key, true) end)
-                    task.wait(0.1)
-                    pcall(function() ActionRemote:FireServer(config.key, false) end)
-                end
+                simulateKeyPress()
                 expand()
                 task.wait(0.2)
                 contract()
-            end)
-            
-            -- Для долгого нажатия (если нужно)
-            ClickRegion.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch then
-                    if ActionRemote then
-                        pcall(function() ActionRemote:FireServer(config.key, true) end)
-                    end
-                end
-            end)
-            
-            ClickRegion.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.Touch then
-                    if ActionRemote then
-                        pcall(function() ActionRemote:FireServer(config.key, false) end)
-                    end
-                end
             end)
 
             player.CharacterAdded:Connect(function()
@@ -1755,7 +1735,7 @@ LeaderboardToggle = Tabs.Main:AddButton({
         
         Fluent:Notify({
             Title = "Custom Leaderboard",
-            Content = "Leaderboard & Controls unlocked! Mobile supported.",
+            Content = "Leaderboard & Controls unlocked! Emulating real key presses.",
             Duration = 3
         })
     end
