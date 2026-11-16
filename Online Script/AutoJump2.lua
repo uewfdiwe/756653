@@ -254,11 +254,15 @@ local function updateBhop()
         applyBhopFriction()
 
         if state.autoJumpType == "Bounce" then
-            local now = tick()
-            local cooldown = state.jumpCooldown or 0.25
-            if IsOnGround() and (now - refs.LastJump) > cooldown then
-                refs.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                refs.LastJump = now
+            local shouldJump = state.autoJumpEnabled or state.bhopHoldActive
+            
+            if shouldJump then
+                local now = tick()
+                local cooldown = state.jumpCooldown or 0.25
+                if IsOnGround() and (now - refs.LastJump) > cooldown then
+                    refs.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    refs.LastJump = now
+                end
             end
         end
     end
