@@ -7,7 +7,10 @@ local Workspace = game:GetService("Workspace")
 local CoreGui = game:GetService("CoreGui")
 
 local player = Players.LocalPlayer
-local InteractRemote = ReplicatedStorage:FindFirstChild("Events") and ReplicatedStorage.Events:FindFirstChild("Interact")
+
+local InteractRemote = ReplicatedStorage:FindFirstChild("Remotes")
+    and ReplicatedStorage.Remotes:FindFirstChild("Character")
+    and ReplicatedStorage.Remotes.Character:FindFirstChild("Interact")
 
 local CharacterService
 pcall(function()
@@ -76,17 +79,14 @@ local function startAutoCarry()
             return
         end
 
-        -- Уже несёшь — не искать других
         if isCarrying or isCarryingPlayer() then
             return
         end
 
-        -- Уже в Carry-state — не искать
         if isInCarryState() then
             return
         end
 
-        -- Уже есть цель — не искать
         if currentCarryTarget then
             return
         end
@@ -109,7 +109,6 @@ local function startAutoCarry()
                                 if InteractRemote then
                                     InteractRemote:FireServer("Carry", otherTag)
                                     currentCarryTarget = otherTag
-                                    -- Ждём 0.5 сек — если не сработало, сбрасываем
                                     task.delay(0.5, function()
                                         if not isCarryingPlayer() and not isInCarryState() then
                                             currentCarryTarget = nil
