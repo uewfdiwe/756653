@@ -163,7 +163,6 @@ local function updateLoop()
     local interactEvent = getInteractEvent()
     local remote = getSetPlayerModeRemote()
     
-    -- 1. Проверяем, не Downed ли я сам
     if getLocalState() == "Downed" then
         if remote then
             pcall(function() remote:FireServer(true) end)
@@ -173,15 +172,12 @@ local function updateLoop()
         return
     end
     
-    -- 2. Ищем ближайшего downed
     local target = findNearestDowned()
     
     if target then
-        -- Телепорт в землю под игроком
         local undergroundPos = target.pos - Vector3.new(0, CONFIG.UndergroundOffset, 0)
         teleportTo(undergroundPos)
         
-        -- Шлём Revive
         if not currentlyReviving[target.tag] then
             currentlyReviving[target.tag] = true
             task.spawn(function()
@@ -191,7 +187,6 @@ local function updateLoop()
             end)
         end
     else
-        -- Нет downed — на платформу
         teleportToPlatform()
     end
 end
