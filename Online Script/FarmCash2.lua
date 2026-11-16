@@ -8,7 +8,7 @@ local LocalPlayer = Players.LocalPlayer
 local CharacterService = require(ReplicatedStorage.Services.Asset.CharacterService)
 
 local CONFIG = {
-    Range = 1000,
+    Range = 10,
     LoopDelay = 0.1,
     ReviveDelay = 0.3,
     ReviveCooldown = 0.5,
@@ -22,6 +22,7 @@ local holdConnection = nil
 local currentlyReviving = {}
 local holdEnabled = false
 local teleportingToTarget = false
+local teleportLockUntil = 0
 
 local function getInteractEvent()
     local events = ReplicatedStorage:FindFirstChild("Events")
@@ -118,25 +119,21 @@ local function getPlatformPosition()
     return secPart.Position + Vector3.new(0, CONFIG.PlatformOffset, 0)
 end
 
--- Удержание на платформе
+-- Удержание на платформе — каждые 0.1 сек, но НЕ перебивает телепорт
 local function startHold()
     if holdConnection then return end
     holdEnabled = true
 
-    holdConnection = RunService.Heartbeat:Connect(function()
-        if not enabled or not holdEnabled then return end
-        if teleportingToTarget then return end
-
-        local platformPos = getPlatformPosition()
-        if not platformPos then return end
-
-        local hrp = getLocalHRP()
-        if hrp then
-            pcall(function()
-                hrp.CFrame = CFrame.new(platformPos)
-                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-                hrp.Velocity = Vector3.new(0, 0, 0)
-            end)
+    holdConnection = task.spawn(function()
+        while enabled and holdEnabled do
+            -- Блокируем hold, пока идёт телепорт
+            if not teleportingToTarget and tick() > teleportLockUntil then
+                local platformPos = getPlatformPosition()
+                if platformPos then
+                    teleportTo(platformPos)
+                end
+            end
+            task.wait(0.05)
         end
     end)
 end
@@ -144,7 +141,7 @@ end
 local function stopHold()
     holdEnabled = false
     if holdConnection then
-        holdConnection:Disconnect()
+        task.cancel(holdConnection)
         holdConnection = nil
     end
 end
@@ -209,7 +206,9 @@ local function updateLoop()
     local target = findNearestDowned()
 
     if target then
+        -- Блокируем hold на 2 секунды (пока телепорт + ревайв)
         teleportingToTarget = true
+        teleportLockUntil = tick() + 2.0
 
         local undergroundPos = target.pos - Vector3.new(0, CONFIG.UndergroundOffset, 0)
         teleportTo(undergroundPos)
@@ -223,7 +222,9 @@ local function updateLoop()
             end)
         end
 
-        task.wait(0.2)
+        -- Ждём, пока hold разблокируется
+        task.wait(0.5)
+
         teleportingToTarget = false
     end
 end
@@ -232,6 +233,8 @@ function module.Start()
     if enabled then return end
     enabled = true
     currentlyReviving = {}
+    teleportingToTarget = false
+    teleportLockUntil = 0
 
     startHold()
 
@@ -251,6 +254,7 @@ function module.Stop()
     end
     stopHold()
     currentlyReviving = {}
+    teleportingToTarget = false
 end
 
 function module.SetRange(range)
