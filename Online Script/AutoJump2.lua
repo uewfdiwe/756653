@@ -37,6 +37,7 @@ local refs = {
     characterConnection = nil,
     jumpButtonDownConnection = nil,
     jumpButtonUpConnection = nil,
+    touchEndedConnection = nil,
     bhopButtonScreenGui = nil,
     createGradientButton = nil,
 }
@@ -253,11 +254,15 @@ local function updateBhop()
         applyBhopFriction()
 
         if state.autoJumpType == "Bounce" then
-            local now = tick()
-            local cooldown = state.jumpCooldown or 0.25
-            if IsOnGround() and (now - refs.LastJump) > cooldown then
-                refs.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                refs.LastJump = now
+            local shouldJump = state.autoJumpEnabled or state.bhopHoldActive
+            
+            if shouldJump then
+                local now = tick()
+                local cooldown = state.jumpCooldown or 0.25
+                if IsOnGround() and (now - refs.LastJump) > cooldown then
+                    refs.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                    refs.LastJump = now
+                end
             end
         end
     end
@@ -431,9 +436,11 @@ end
 
 local function setupMobileJump()
     if not UserInputService.TouchEnabled then return end
+
     task.spawn(function()
         task.wait(2)
-        pcall(function()
+
+        local success, err = pcall(function()
             local touchGui = player:WaitForChild("PlayerGui"):WaitForChild("TouchGui", 10)
             if not touchGui then return end
             local frame = touchGui:WaitForChild("TouchControlFrame", 10)
@@ -449,21 +456,43 @@ local function setupMobileJump()
                 refs.jumpButtonUpConnection:Disconnect()
                 refs.jumpButtonUpConnection = nil
             end
+            if refs.touchEndedConnection then
+                refs.touchEndedConnection:Disconnect()
+                refs.touchEndedConnection = nil
+            end
 
-            refs.jumpButtonDownConnection = jumpBtn.MouseButton1Down:Connect(function()
-                if state.bhopHoldToggle then
-                    state.bhopHoldActive = true
-                    checkBhopState()
+            refs.jumpButtonDownConnection = jumpBtn.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch
+                    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    if state.bhopHoldToggle then
+                        state.bhopHoldActive = true
+                        checkBhopState()
+                    end
                 end
             end)
 
-            refs.jumpButtonUpConnection = jumpBtn.MouseButton1Up:Connect(function()
+            refs.jumpButtonUpConnection = jumpBtn.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch
+                    or input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    if state.bhopHoldToggle then
+                        state.bhopHoldActive = false
+                        checkBhopState()
+                    end
+                end
+            end)
+
+            refs.touchEndedConnection = UserInputService.TouchEnded:Connect(function(input, gp)
+                if gp then return end
                 if state.bhopHoldToggle then
                     state.bhopHoldActive = false
                     checkBhopState()
                 end
             end)
         end)
+
+        if not success then
+            warn("[AutoJump] setupMobileJump error:", err)
+        end
     end)
 end
 
@@ -596,6 +625,18 @@ function AutoJump.Destroy()
     if refs.characterConnection then
         refs.characterConnection:Disconnect()
         refs.characterConnection = nil
+    end
+    if refs.jumpButtonDownConnection then
+        refs.jumpButtonDownConnection:Disconnect()
+        refs.jumpButtonDownConnection = nil
+    end
+    if refs.jumpButtonUpConnection then
+        refs.jumpButtonUpConnection:Disconnect()
+        refs.jumpButtonUpConnection = nil
+    end
+    if refs.touchEndedConnection then
+        refs.touchEndedConnection:Disconnect()
+        refs.touchEndedConnection = nil
     end
     if refs.bhopButtonScreenGui then
         refs.bhopButtonScreenGui:Destroy()
