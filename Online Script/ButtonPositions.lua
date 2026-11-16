@@ -7,6 +7,7 @@ local ButtonPositions = {}
 local buttonGUIs = {
     "DraconicRespawnButtonGUI",
     "AutoCarryButtonGUI",
+    "AutoReviveButtonGUI",
     "SlideButtonGUI",
     "GravityButtonGUI",
     "CrouchButtonGUI",
