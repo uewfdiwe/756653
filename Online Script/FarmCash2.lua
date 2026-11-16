@@ -7,8 +7,8 @@ local RunService = game:GetService("RunService")
 local CharacterService = require(ReplicatedStorage.Services.Asset.CharacterService)
 
 local CONFIG = {
-    UnderOffset = Vector3.new(0, -5, 0), -- Смещение в землю
-    ReviveDelay = 2,                     -- Задержка 2 секунды
+    UnderOffset = Vector3.new(0, -5, 0),
+    ReviveDelay = 2,
     LoopDelay = 0.1
 }
 
@@ -19,10 +19,11 @@ local activeTarget = nil
 
 local function getInteractEvent()
     local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    if not remotes then return nil end
-    local charFolder = remotes:FindFirstChild("Character")
-    if not charFolder then return nil end
-    return charFolder:FindFirstChild("Interact")
+    if remotes then
+        local charFolder = remotes:FindFirstChild("Character")
+        if charFolder then return charFolder:FindFirstChild("Interact") end
+    end
+    return nil
 end
 
 local interactEvent = getInteractEvent()
@@ -42,7 +43,6 @@ local function getMyState()
     return nil
 end
 
--- Ручной поиск игрока по тегу (исправление ошибки)
 local function getCharacterByTag(tag)
     local playersFolder = Workspace:FindFirstChild("Players")
     if not playersFolder then return nil end
@@ -106,8 +106,9 @@ local function farmLoop()
             continue
         end
 
-        -- 1. Если Я упал
+        -- Если я упал, ставим флаг занятости и ревайвим себя
         if myState == "Downed" then
+            getgenv().FarmCashBusy = true
             local myTag = nil
             pcall(function()
                 local myChar = CharacterService:GetLocalCharacter()
@@ -121,19 +122,21 @@ local function farmLoop()
                 task.spawn(function()
                     if interactEvent then
                         pcall(function() interactEvent:FireServer("Revive", myTag, true) end)
-                        task.wait(CONFIG.ReviveDelay) -- 2 сек
+                        task.wait(CONFIG.ReviveDelay)
                         pcall(function() interactEvent:FireServer("Revive", myTag) end)
                     end
                     task.wait(1)
                     currentlyReviving[myTag] = nil
+                    getgenv().FarmCashBusy = false
                 end)
             end
             task.wait(CONFIG.LoopDelay)
             continue
         end
 
-        -- 2. Если есть активная цель
+        -- Если есть цель (упавший игрок)
         if activeTarget then
+            getgenv().FarmCashBusy = true -- Блокируем платформу
             local targetTag = activeTarget.tag
             local targetChar = getCharacterByTag(targetTag)
             
@@ -146,37 +149,43 @@ local function farmLoop()
             end
             
             if isStillDowned then
-                -- ДЕРЖИМ ПОД ИГРОКОМ (В ЗЕМЛЕ)
+                -- Держим под игроком
                 local targetHRP = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
                 if targetHRP then
                     teleportTo(targetHRP.Position + CONFIG.UnderOffset, true)
                 end
             else
-                -- Цель встала! Возвращаемся на платформу
+                -- Цель встала! Отпускаем флаг и возвращаемся
                 activeTarget = nil
+                getgenv().FarmCashBusy = false
                 teleportTo(getPlatformPos(), true)
             end
         else
-            -- 3. Ищем упавших других игроков
+            -- Ищем упавших других игроков
             local targetPos, targetTag = findDownedPlayer()
             
             if targetPos and targetTag then
+                getgenv().FarmCashBusy = true -- Блокируем платформу
                 activeTarget = { tag = targetTag }
                 currentlyReviving[targetTag] = true
                 
                 teleportTo(targetPos + CONFIG.UnderOffset, true)
                 
                 task.spawn(function()
+                    -- ЖДЕМ 1 СЕКУНДУ перед ревайвом, чтобы успеть долететь до земли
+                    task.wait(0.5) 
+                    
                     if interactEvent then
                         pcall(function() interactEvent:FireServer("Revive", targetTag, true) end)
-                        task.wait(CONFIG.ReviveDelay) -- 2 сек
+                        task.wait(CONFIG.ReviveDelay)
                         pcall(function() interactEvent:FireServer("Revive", targetTag) end)
                     end
                     task.wait(3)
                     currentlyReviving[targetTag] = nil
                 end)
             else
-                -- 4. Нет целей — стоим на платформе
+                -- Нет целей — отпускаем флаг, платформа снова работает
+                getgenv().FarmCashBusy = false
                 teleportTo(getPlatformPos(), true)
             end
         end
@@ -188,11 +197,13 @@ end
 function module.Start()
     if enabled then return end
     enabled = true
+    getgenv().FarmCashBusy = false
     handle = task.spawn(farmLoop)
 end
 
 function module.Stop()
     enabled = false
+    getgenv().FarmCashBusy = false
     if handle then
         task.cancel(handle)
         handle = nil
