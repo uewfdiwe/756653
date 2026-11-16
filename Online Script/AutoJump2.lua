@@ -35,8 +35,8 @@ local refs = {
     realisticLastJump = 0,
     LastJump = 0,
     characterConnection = nil,
-    jumpRequestConnection = nil,
-    touchEndedConnection = nil,
+    jumpButtonDownConnection = nil,
+    jumpButtonUpConnection = nil,
     bhopButtonScreenGui = nil,
     createGradientButton = nil,
 }
@@ -59,6 +59,7 @@ local function findFrictionTables()
     local now = tick()
     if now - refs.lastFrictionScanTime < FRICTION_SCAN_INTERVAL and #refs.frictionTables > 0 then return end
     refs.lastFrictionScanTime = now
+
     refs.frictionTables = {}
 
     for _, obj in pairs(getgc(true)) do
@@ -91,6 +92,7 @@ end
 
 local function applyBhopFriction()
     local isActive = state.autoJumpEnabled or state.bhopHoldActive or state.realisticPCEnabled
+
     if #refs.frictionTables == 0 then findFrictionTables() end
 
     for _, tableData in ipairs(refs.frictionTables) do
@@ -172,6 +174,7 @@ end
 local function doJumpRealistic()
     local char = CharacterService:GetLocalCharacter()
     if not char then return false end
+
     local success = false
 
     if char.Movement and char.Movement.Jump then
@@ -189,6 +192,7 @@ local function doJumpRealistic()
             success = true
         end
     end
+
     return success
 end
 
@@ -231,6 +235,7 @@ end
 
 local function updateBhop()
     if not refs.bhopLoaded then return end
+
     local isActive = state.autoJumpEnabled or state.bhopHoldActive or state.realisticPCEnabled
 
     if isActive then
@@ -244,17 +249,15 @@ local function updateBhop()
         end
 
         if refs.Humanoid:GetState() == Enum.HumanoidStateType.Dead then return end
+
         applyBhopFriction()
 
         if state.autoJumpType == "Bounce" then
-            local shouldJump = state.autoJumpEnabled or state.bhopHoldActive
-            if shouldJump then
-                local now = tick()
-                local cooldown = state.jumpCooldown or 0.25
-                if IsOnGround() and (now - refs.LastJump) > cooldown then
-                    refs.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                    refs.LastJump = now
-                end
+            local now = tick()
+            local cooldown = state.jumpCooldown or 0.25
+            if IsOnGround() and (now - refs.LastJump) > cooldown then
+                refs.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                refs.LastJump = now
             end
         end
     end
@@ -349,6 +352,7 @@ end
 
 local function checkBhopState()
     local shouldLoad = state.autoJumpEnabled or state.bhopHoldActive or state.realisticPCEnabled
+
     if shouldLoad then
         loadBhop()
         updateRotationState()
@@ -361,6 +365,7 @@ end
 RunService.Heartbeat:Connect(function()
     local isRealistic = (state.autoJumpType == "Realistic")
     if not isRealistic then return end
+
     local shouldJump = state.realisticPCEnabled or state.autoJumpEnabled
 
     if shouldJump and not refs.bhopLoaded then
@@ -370,6 +375,7 @@ RunService.Heartbeat:Connect(function()
     end
 
     if not shouldJump then return end
+
     local now = tick()
     local cooldown = state.jumpCooldown or 0.25
     if now - refs.realisticLastJump < cooldown then return end
@@ -425,29 +431,39 @@ end
 
 local function setupMobileJump()
     if not UserInputService.TouchEnabled then return end
+    task.spawn(function()
+        task.wait(2)
+        pcall(function()
+            local touchGui = player:WaitForChild("PlayerGui"):WaitForChild("TouchGui", 10)
+            if not touchGui then return end
+            local frame = touchGui:WaitForChild("TouchControlFrame", 10)
+            if not frame then return end
+            local jumpBtn = frame:WaitForChild("JumpButton", 10)
+            if not jumpBtn then return end
 
-    if refs.jumpRequestConnection then
-        refs.jumpRequestConnection:Disconnect()
-        refs.jumpRequestConnection = nil
-    end
-    if refs.touchEndedConnection then
-        refs.touchEndedConnection:Disconnect()
-        refs.touchEndedConnection = nil
-    end
+            if refs.jumpButtonDownConnection then
+                refs.jumpButtonDownConnection:Disconnect()
+                refs.jumpButtonDownConnection = nil
+            end
+            if refs.jumpButtonUpConnection then
+                refs.jumpButtonUpConnection:Disconnect()
+                refs.jumpButtonUpConnection = nil
+            end
 
-    refs.jumpRequestConnection = UserInputService.JumpRequest:Connect(function()
-        if state.bhopHoldToggle then
-            state.bhopHoldActive = true
-            checkBhopState()
-        end
-    end)
+            refs.jumpButtonDownConnection = jumpBtn.MouseButton1Down:Connect(function()
+                if state.bhopHoldToggle then
+                    state.bhopHoldActive = true
+                    checkBhopState()
+                end
+            end)
 
-    refs.touchEndedConnection = UserInputService.TouchEnded:Connect(function(input, gp)
-        if gp then return end
-        if state.bhopHoldToggle then
-            state.bhopHoldActive = false
-            checkBhopState()
-        end
+            refs.jumpButtonUpConnection = jumpBtn.MouseButton1Up:Connect(function()
+                if state.bhopHoldToggle then
+                    state.bhopHoldActive = false
+                    checkBhopState()
+                end
+            end)
+        end)
     end)
 end
 
@@ -580,14 +596,6 @@ function AutoJump.Destroy()
     if refs.characterConnection then
         refs.characterConnection:Disconnect()
         refs.characterConnection = nil
-    end
-    if refs.jumpRequestConnection then
-        refs.jumpRequestConnection:Disconnect()
-        refs.jumpRequestConnection = nil
-    end
-    if refs.touchEndedConnection then
-        refs.touchEndedConnection:Disconnect()
-        refs.touchEndedConnection = nil
     end
     if refs.bhopButtonScreenGui then
         refs.bhopButtonScreenGui:Destroy()
