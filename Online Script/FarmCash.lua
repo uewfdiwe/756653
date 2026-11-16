@@ -214,11 +214,11 @@ function module.Stop()
 end
 
 function module.SetRange(range)
-    CONFIG.Range = tonumber(range) or 25
+    CONFIG.Range = tonumber(range) or 10
 end
 
 function module.SetDelay(delay)
-    CONFIG.LoopDelay = tonumber(delay) or 0.1
+    CONFIG.LoopDelay = tonumber(delay) or 1.5
 end
 
 function module.SetCooldown(cooldown)
