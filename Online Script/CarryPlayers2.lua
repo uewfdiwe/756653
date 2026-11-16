@@ -21,6 +21,9 @@ local started = false
 local enabled = false
 local isCarrying = false
 
+local ATTEMPT_COOLDOWN = 3
+local lastAttempts = {}
+
 local carryStates = {
     CarryIdle = true,
     CarryMove = true,
@@ -70,6 +73,8 @@ local function startAutoCarry()
         AutoCarryConnection = nil
     end
 
+    lastAttempts = {}
+
     AutoCarryConnection = RunService.Heartbeat:Connect(function()
         if not enabled then
             return
@@ -96,12 +101,20 @@ local function startAutoCarry()
                     if otherTag then
                         local otherHrp = otherChar:FindFirstChild("HumanoidRootPart")
                         if otherHrp then
-                            local dist = (hrp.Position - otherHrp.Position).Magnitude
-                            if dist <= 20 then
-                                if InteractRemote then
-                                    InteractRemote:FireServer("Carry", otherTag)
+                            local now = tick()
+                            local lastAttempt = lastAttempts[otherTag] or 0
+
+                            if now - lastAttempt >= ATTEMPT_COOLDOWN then
+                                local dist = (hrp.Position - otherHrp.Position).Magnitude
+                                if dist <= 20 then
+                                    lastAttempts[otherTag] = now
+                                    if InteractRemote then
+                                        pcall(function()
+                                            InteractRemote:FireServer("Carry", otherTag)
+                                        end)
+                                    end
+                                    return
                                 end
-                                task.wait(0.01)
                             end
                         end
                     end
@@ -117,6 +130,7 @@ local function stopAutoCarry()
         AutoCarryConnection = nil
     end
     isCarrying = false
+    lastAttempts = {}
 end
 
 local function updateButtonText(btn)
@@ -205,12 +219,14 @@ local function setupCarryWeldListener()
         carryWeldConnection = char.ChildAdded:Connect(function(child)
             if child.Name == "CarryWeld" then
                 isCarrying = true
+                lastAttempts = {}
             end
         end)
 
         carryWeldConnection = char.ChildRemoved:Connect(function(child)
             if child.Name == "CarryWeld" then
                 isCarrying = false
+                lastAttempts = {}
             end
         end)
     end
