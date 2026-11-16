@@ -7,8 +7,8 @@ local RunService = game:GetService("RunService")
 local CharacterService = require(ReplicatedStorage.Services.Asset.CharacterService)
 
 local CONFIG = {
-    UnderOffset = Vector3.new(0, -5, 0),
-    ReviveDelay = 1.5,
+    UnderOffset = Vector3.new(0, -5, 0), -- Смещение в землю
+    ReviveDelay = 2,                     -- Задержка 2 секунды
     LoopDelay = 0.1
 }
 
@@ -38,6 +38,18 @@ local function getMyState()
     local char = CharacterService:GetLocalCharacter()
     if char and char.State then
         return char.State.State
+    end
+    return nil
+end
+
+-- Ручной поиск игрока по тегу (исправление ошибки)
+local function getCharacterByTag(tag)
+    local playersFolder = Workspace:FindFirstChild("Players")
+    if not playersFolder then return nil end
+    for _, child in ipairs(playersFolder:GetChildren()) do
+        if child:IsA("Model") and child:GetAttribute("Tag") == tag then
+            return child
+        end
     end
     return nil
 end
@@ -94,6 +106,7 @@ local function farmLoop()
             continue
         end
 
+        -- 1. Если Я упал
         if myState == "Downed" then
             local myTag = nil
             pcall(function()
@@ -108,7 +121,7 @@ local function farmLoop()
                 task.spawn(function()
                     if interactEvent then
                         pcall(function() interactEvent:FireServer("Revive", myTag, true) end)
-                        task.wait(CONFIG.ReviveDelay)
+                        task.wait(CONFIG.ReviveDelay) -- 2 сек
                         pcall(function() interactEvent:FireServer("Revive", myTag) end)
                     end
                     task.wait(1)
@@ -119,10 +132,10 @@ local function farmLoop()
             continue
         end
 
+        -- 2. Если есть активная цель
         if activeTarget then
             local targetTag = activeTarget.tag
-            local playersFolder = Workspace:FindFirstChild("Players")
-            local targetChar = playersFolder and playersFolder:FindFirstChildByAttribute("Tag", targetTag)
+            local targetChar = getCharacterByTag(targetTag)
             
             local isStillDowned = false
             if targetChar then
@@ -133,15 +146,18 @@ local function farmLoop()
             end
             
             if isStillDowned then
+                -- ДЕРЖИМ ПОД ИГРОКОМ (В ЗЕМЛЕ)
                 local targetHRP = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
                 if targetHRP then
                     teleportTo(targetHRP.Position + CONFIG.UnderOffset, true)
                 end
             else
+                -- Цель встала! Возвращаемся на платформу
                 activeTarget = nil
                 teleportTo(getPlatformPos(), true)
             end
         else
+            -- 3. Ищем упавших других игроков
             local targetPos, targetTag = findDownedPlayer()
             
             if targetPos and targetTag then
@@ -153,13 +169,14 @@ local function farmLoop()
                 task.spawn(function()
                     if interactEvent then
                         pcall(function() interactEvent:FireServer("Revive", targetTag, true) end)
-                        task.wait(CONFIG.ReviveDelay)
+                        task.wait(CONFIG.ReviveDelay) -- 2 сек
                         pcall(function() interactEvent:FireServer("Revive", targetTag) end)
                     end
                     task.wait(3)
                     currentlyReviving[targetTag] = nil
                 end)
             else
+                -- 4. Нет целей — стоим на платформе
                 teleportTo(getPlatformPos(), true)
             end
         end
