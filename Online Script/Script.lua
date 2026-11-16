@@ -15,14 +15,14 @@ local Window = Fluent:CreateWindow({
     Tags = {
         { Text = " Evade Overhaul ", Color = Color3.fromRGB(211, 15, 40) },
     },
-    Version = "Version 3.7 Beta",
+    Version = "Version 3.8 Beta",
     Size = UDim2.fromOffset(580, 460),
     Theme = "Blood Red",
     Search = true,
     SearchInHeader = true,
     TitleIcon = "rbxassetid://102225156206159",
     UserInfoTop = true,
-    UserInfoTitle = "Hallowen Evade?",
+    UserInfoTitle = "NEW UPDATE?",
     MinimizeKey = Enum.KeyCode.LeftControl,
 })
 
@@ -929,11 +929,11 @@ TracerTicketToggle:OnChanged(function(value)
     end
 end)
 
- modificationSection = Tabs.Main:AddSection("Respawn", "solar/restart-bold")
+modificationSection = Tabs.Main:AddSection("Respawn", "solar/restart-bold")
 
- local CharacterService = require(game:GetService("ReplicatedStorage").Services.Asset.CharacterService)
+local CharacterService = require(game:GetService("ReplicatedStorage").Services.Asset.CharacterService)
 
- AutoRespawnTypeDropdown = Tabs.Main:AddDropdown("AutoRespawnTypeDropdown", {
+AutoRespawnTypeDropdown = Tabs.Main:AddDropdown("AutoRespawnTypeDropdown", {
     Title = "Auto Respawn Type",
     Values = {"Spawnpoint", "Fake Revive"},
     Multi = false,
@@ -958,6 +958,31 @@ local function getLocalState()
     return nil
 end
 
+-- ⚡ Проверка: Downed ИЛИ Ragdolling
+local function isDownedOrRagdolling()
+    local state = getLocalState()
+    if not state then return false end
+    if state == "Downed" then return true end
+    if state == "Ragdolling" then return true end
+
+    local char = CharacterService:GetLocalCharacter()
+    if char and char.DataRegistry then
+        local rag = char.DataRegistry:Get("Ragdolling")
+        if rag == true then return true end
+    end
+
+    local playersFolder = workspace:FindFirstChild("Players")
+    if playersFolder then
+        local model = playersFolder:FindFirstChild(LocalPlayer.Name)
+        if model then
+            if model:GetAttribute("Downed") == true then return true end
+            if model:GetAttribute("Ragdolling") == true then return true end
+        end
+    end
+
+    return false
+end
+
 local function getLocalHRP()
     local playersFolder = workspace:FindFirstChild("Players")
     if playersFolder then
@@ -972,8 +997,7 @@ end
 RunService.Heartbeat:Connect(function()
     local hrp = getLocalHRP()
     if hrp then
-        local state = getLocalState()
-        if state and state ~= "Downed" then
+        if not isDownedOrRagdolling() then
             getgenv().lastSavedPosition = hrp.Position
         end
     end
@@ -1015,8 +1039,7 @@ local function doFakeRevive()
 end
 
 local function doRevive()
-    local state = getLocalState()
-    if state ~= "Downed" then
+    if not isDownedOrRagdolling() then
         return false
     end
 
@@ -1040,8 +1063,7 @@ AutoRespawnToggle = Tabs.Main:AddToggle("AutoRespawnToggle", {
             getgenv().respawnActive = true
             task.spawn(function()
                 while getgenv().respawnActive do
-                    local state = getLocalState()
-                    if state == "Downed" then
+                    if isDownedOrRagdolling() then
                         doRevive()
                     end
                     task.wait(0.1)
@@ -1098,7 +1120,6 @@ function manualRevive()
         getgenv().doRevive()
     end
 end
-
 
 modificationSection = Tabs.Main:AddSection("Things", "solar/settings-bold")
 
@@ -1416,6 +1437,7 @@ local function loadOtherModule(fileName)
 end
 
 local AFKFarm = loadOtherModule("AFKFarm.lua")
+local FarmCash = loadOtherModule("FarmCash.lua")
 local TicketFarm = loadOtherModule("TicketFarm.lua")
 local Teleports = loadOtherModule("Teleports.lua")
 local ServerList = loadOtherModule("ServerList.lua")
@@ -1435,6 +1457,25 @@ AFKFarmToggle = OtherTab:AddToggle("AFKFarmToggle", {
             AFKFarm.start()
         else
             AFKFarm.stop()
+        end
+    end
+})
+
+local FarmCash = loadOtherModule("FarmCash.lua")
+
+OtherTab:AddToggle("FarmCashToggle", {
+    Title = "Farm Cash (Revive)",
+    Description = "Teleport under downed players, revive them, return to platform. Auto revive yourself if downed.",
+    Default = false,
+    Callback = function(value)
+        if not FarmCash then
+            Fluent:Notify({ Title = "Other", Content = "FarmCash module not loaded", Duration = 4 })
+            return
+        end
+        if value then
+            FarmCash.Start()
+        else
+            FarmCash.Stop()
         end
     end
 })
@@ -1645,90 +1686,98 @@ MiscTab:AddInput("AirStrafeInput", {
 
 MiscTab:AddSection("Bounce", "solar/transfer-vertical-bold")
 
-BounceToggle = MiscTab:AddToggle("BounceToggle", {
-    Title = "Modify Bounce",
-    Default = false
-})
-
-BounceInput = MiscTab:AddInput("BounceInput", {
-    Title = "Player Bounce",
-    Default = "110",
-    Placeholder = "Enter bounce speed",
-    Numeric = true,
-    Finished = false
-})
-
-local bounceConnection = nil
-local player = game:GetService("Players").LocalPlayer
-
-local function updateBounce()
-    if not BounceToggle.Value then return end
-
-    local gamePlayers = workspace.Game:FindFirstChild("Players")
-    if not gamePlayers then return end
-
-    local playerModel = gamePlayers:FindFirstChild(player.Name)
-    if not playerModel then return end
-
-    local humanoid = playerModel:FindFirstChild("Humanoid")
-    if not humanoid then return end
-
-    local speedValue = tonumber(BounceInput.Value) or 110
-    humanoid.WalkSpeed = speedValue
+local BounceModule
+do
+    local ok, result = pcall(loadOnlineModule, "Bounce.lua")
+    BounceModule = ok and result or nil
+    if not ok then
+        warn("[Misc] Failed to load Bounce.lua:", result)
+    end
 end
 
-BounceToggle:OnChanged(function(state)
-    if state then
-
-        if bounceConnection then
-            bounceConnection:Disconnect()
-        end
-
-        bounceConnection = game:GetService("RunService").Heartbeat:Connect(updateBounce)
-    else
-        if bounceConnection then
-            bounceConnection:Disconnect()
-            bounceConnection = nil
-        end
-
-
-        local gamePlayers = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players")
-        if gamePlayers then
-            local playerModel = gamePlayers:FindFirstChild(player.Name)
-            if playerModel then
-                local humanoid = playerModel:FindFirstChild("Humanoid")
-                if humanoid then
-                    humanoid.WalkSpeed = 0  
-                end
+BounceToggle = MiscTab:AddToggle("BounceToggle", {
+    Title = "Bounce Boost",
+    Default = false,
+    Callback = function(state)
+        if BounceModule then
+            if state then
+                BounceModule:Start()
+            else
+                BounceModule:Stop()
             end
         end
     end
-end)
+})
 
-BounceInput:OnChanged(function(Value)
-    if BounceToggle.Value then
-        local gamePlayers = workspace:FindFirstChild("Game") and workspace.Game:FindFirstChild("Players")
-        if gamePlayers then
-            local playerModel = gamePlayers:FindFirstChild(player.Name)
-            if playerModel then
-                local humanoid = playerModel:FindFirstChild("Humanoid")
-                if humanoid then
-                    local speedValue = tonumber(Value) or 110
-                    humanoid.WalkSpeed = speedValue
-                end
-            end
+BouncePowerInput = MiscTab:AddInput("BouncePowerInput", {
+    Title = "Bounce Power",
+    Default = "70",
+    Placeholder = "Enter boost power",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and BounceModule then
+            BounceModule:SetPower(num)
         end
     end
-end)
+})
 
-player.CharacterAdded:Connect(function()
-    task.wait(1)
-    if BounceToggle.Value then
-
-        task.wait(1)
-        updateBounce()
+BounceCooldownInput = MiscTab:AddInput("BounceCooldownInput", {
+    Title = "Bounce Cooldown (Seconds)",
+    Default = "0.2",
+    Placeholder = "Enter cooldown",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and num >= 0 and BounceModule then
+            BounceModule:SetCooldown(num)
+        end
     end
-end)
+})
+
+BounceMinAngleInput = MiscTab:AddInput("BounceMinAngleInput", {
+    Title = "Min Angle",
+    Default = "30",
+    Placeholder = "Enter min angle",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and BounceModule then
+            BounceModule:SetMinAngle(num)
+        end
+    end
+})
+
+BounceMaxAngleInput = MiscTab:AddInput("BounceMaxAngleInput", {
+    Title = "Max Angle",
+    Default = "75",
+    Placeholder = "Enter max angle",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and BounceModule then
+            BounceModule:SetMaxAngle(num)
+        end
+    end
+})
+
+BounceMinSpeedInput = MiscTab:AddInput("BounceMinSpeedInput", {
+    Title = "Min Speed",
+    Default = "70",
+    Placeholder = "Enter min speed",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        local num = tonumber(Value)
+        if num and BounceModule then
+            BounceModule:SetMinSpeed(num)
+        end
+    end
+})
 
 MiscTab:AddSection("Carry Players", "solar/users-group-rounded-bold")
 
@@ -1810,6 +1859,143 @@ CarryKeybind = MiscTab:AddKeybind("CarryKeybind", {
         CarryPlayers.setEnabled(newValue)
     end
 })
+
+MiscTab:AddSection("Revive Players", "solar/heart-pulse-bold")
+
+local AutoRevive
+do
+    local ok, result = pcall(loadOnlineModule, "AutoRevive.lua")
+    AutoRevive = ok and result or nil
+    if not ok then
+        warn("[Misc] Failed to load AutoRevive.lua:", result)
+        Fluent:Notify({
+            Title = "Misc",
+            Content = "Failed to load AutoRevive.lua",
+            Duration = 5
+        })
+    end
+end
+
+AutoReviveToggle = MiscTab:AddToggle("AutoReviveToggle", {
+    Title = "Auto Revive",
+    Default = false,
+    Callback = function(Value)
+        if AutoRevive then
+            if Value then
+                AutoRevive.Start()
+            else
+                AutoRevive.Stop()
+            end
+        end
+    end
+})
+
+local autoReviveButtonScreenGui = nil
+local autoReviveButtonState = false
+
+local function createAutoReviveButton()
+    local CoreGui = game:GetService("CoreGui")
+    
+    if autoReviveButtonScreenGui then
+        autoReviveButtonScreenGui:Destroy()
+        autoReviveButtonScreenGui = nil
+    end
+    
+    autoReviveButtonScreenGui = Instance.new("ScreenGui")
+    autoReviveButtonScreenGui.Name = "AutoReviveButtonGUI"
+    autoReviveButtonScreenGui.ResetOnSpawn = false
+    autoReviveButtonScreenGui.Parent = CoreGui
+    
+    local buttonSize = 180
+    if Options.AutoReviveButtonSizeInput and Options.AutoReviveButtonSizeInput.Value and tonumber(Options.AutoReviveButtonSizeInput.Value) then
+        buttonSize = tonumber(Options.AutoReviveButtonSizeInput.Value)
+    end
+    local btnWidth = math.max(150, math.min(buttonSize, 400))
+    local btnHeight = math.max(60, math.min(buttonSize * 0.4, 160))
+    
+    local btn, clicker, stroke = createGradientButton(
+        autoReviveButtonScreenGui,
+        UDim2.new(0.5, -btnWidth/2, 0.5, -btnHeight/2),
+        UDim2.new(0, btnWidth, 0, btnHeight),
+        autoReviveButtonState and "Auto Revive: On" or "Auto Revive: Off"
+    )
+    
+    clicker.MouseButton1Click:Connect(function()
+        autoReviveButtonState = not autoReviveButtonState
+        
+        if btn:FindFirstChild("TextLabel") then
+            btn.TextLabel.Text = autoReviveButtonState and "Auto Revive: On" or "Auto Revive: Off"
+        end
+        
+        if AutoRevive then
+            if autoReviveButtonState then
+                AutoRevive.Start()
+            else
+                AutoRevive.Stop()
+            end
+        end
+        
+        if Options.AutoReviveToggle then
+            Options.AutoReviveToggle:SetValue(autoReviveButtonState)
+        end
+    end)
+end
+
+AutoReviveButtonToggle = MiscTab:AddToggle("AutoReviveButtonToggle", {
+    Title = "Auto Revive Button GUI",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            createAutoReviveButton()
+        else
+            if autoReviveButtonScreenGui then
+                autoReviveButtonScreenGui:Destroy()
+                autoReviveButtonScreenGui = nil
+            end
+        end
+    end
+})
+
+AutoReviveKeybind = MiscTab:AddKeybind("AutoReviveKeybind", {
+    Title = "Auto Revive Keybind",
+    Mode = "Toggle",
+    Default = "R",
+    ChangedCallback = function(New)
+    end,
+    Callback = function()
+        autoReviveButtonState = not autoReviveButtonState
+        
+        if AutoRevive then
+            if autoReviveButtonState then
+                AutoRevive.Start()
+            else
+                AutoRevive.Stop()
+            end
+        end
+        
+        if autoReviveButtonScreenGui and autoReviveButtonScreenGui:FindFirstChild("GradientBtn") then
+            local button = autoReviveButtonScreenGui:FindFirstChild("GradientBtn")
+            if button and button:FindFirstChild("TextLabel") then
+                button.TextLabel.Text = autoReviveButtonState and "Auto Revive: On" or "Auto Revive: Off"
+            end
+        end
+        
+        if Options.AutoReviveToggle then
+            Options.AutoReviveToggle:SetValue(autoReviveButtonState)
+        end
+    end
+})
+
+AutoReviveToggle:OnChanged(function(Value)
+    autoReviveButtonState = Value
+    
+    if autoReviveButtonScreenGui and autoReviveButtonScreenGui:FindFirstChild("GradientBtn") then
+        local button = autoReviveButtonScreenGui:FindFirstChild("GradientBtn")
+        if button and button:FindFirstChild("TextLabel") then
+            button.TextLabel.Text = autoReviveButtonState and "Auto Revive: On" or "Auto Revive: Off"
+        end
+    end
+end)
 
 MiscTab:AddSection("Gun Functions", "solar/bomb-emoji-bold")
 
@@ -1998,7 +2184,6 @@ GravityAdjustmentInput = MiscTab:AddInput("GravityAdjustmentInput", {
 })
 
 originalGravity = workspace.Gravity
-
 GravityToggle:OnChanged(function(state)
     if Options.GravityButtonToggle and Options.GravityButtonToggle.Value then
         local CoreGui = game:GetService("CoreGui")
@@ -2353,6 +2538,8 @@ local slideFrictionValue = -8
 local slideOriginalValues = {}
 local infiniteSlideHeartbeat = nil
 local infiniteSlideCharacterConn = nil
+local slideFrictionApplied = false
+local DEFAULT_SLIDE_FRICTION = 5
 
 local slideStates = {
     Slide = true,
@@ -2371,6 +2558,13 @@ local function getMoveStatsTable(char)
     return ms.MoveStats or ms
 end
 
+local function captureBaseFriction(current)
+    if type(current) == "number" and current >= 1 then
+        return current
+    end
+    return DEFAULT_SLIDE_FRICTION
+end
+
 local function applySlideFriction()
     local char = getLocalChar()
     if not char then return end
@@ -2378,13 +2572,17 @@ local function applySlideFriction()
     if not tbl then return end
 
     if slideOriginalValues.Friction == nil then
-        slideOriginalValues.Friction = tbl.Friction
+        slideOriginalValues.Friction = captureBaseFriction(tbl.Friction)
     end
     if slideOriginalValues.RunDeaccel == nil then
         slideOriginalValues.RunDeaccel = tbl.RunDeaccel
     end
 
     tbl.Friction = slideFrictionValue
+    local jump = rawget(getgenv(), "AutoJump")
+    if type(jump) == "table" and type(jump.SetExternalFriction) == "function" then
+        jump.SetExternalFriction(slideFrictionValue)
+    end
 end
 
 local function restoreFriction()
@@ -2393,8 +2591,24 @@ local function restoreFriction()
     local tbl = getMoveStatsTable(char)
     if not tbl then return end
 
-    if slideOriginalValues.Friction ~= nil then
-        tbl.Friction = slideOriginalValues.Friction
+    local jump = rawget(getgenv(), "AutoJump")
+    local handedOff = false
+    if type(jump) == "table" and type(jump.IsFrictionActive) == "function" and jump.IsFrictionActive() then
+        if type(jump.ReapplyAcceleration) == "function" then
+            jump.ReapplyAcceleration()
+            handedOff = true
+        end
+    elseif type(jump) == "table" and type(jump.ResetFriction) == "function" then
+        jump.ResetFriction()
+        handedOff = true
+    end
+
+    if not handedOff then
+        local restore = slideOriginalValues.Friction
+        if type(restore) ~= "number" or restore < 1 then
+            restore = DEFAULT_SLIDE_FRICTION
+        end
+        tbl.Friction = restore
     end
     if slideOriginalValues.RunDeaccel ~= nil then
         tbl.RunDeaccel = slideOriginalValues.RunDeaccel
@@ -2411,8 +2625,10 @@ local function infiniteSlideHeartbeatFunc()
 
     if slideStates[state] then
         applySlideFriction()
-    else
+        slideFrictionApplied = true
+    elseif slideFrictionApplied then
         restoreFriction()
+        slideFrictionApplied = false
     end
 end
 
@@ -2426,6 +2642,8 @@ local function startInfiniteSlide()
 end
 
 local function stopInfiniteSlide()
+    infiniteSlideEnabled = false
+    slideFrictionApplied = false
     if infiniteSlideHeartbeat then
         infiniteSlideHeartbeat:Disconnect()
         infiniteSlideHeartbeat = nil
@@ -2435,9 +2653,8 @@ local function stopInfiniteSlide()
 end
 
 local function setInfiniteSlide(enabled)
-    infiniteSlideEnabled = enabled
-
     if enabled then
+        infiniteSlideEnabled = true
         startInfiniteSlide()
     else
         stopInfiniteSlide()
@@ -2560,11 +2777,19 @@ getgenv().InfiniteSlide = {
         startInfiniteSlide()
     end,
     Disable = function()
-        infiniteSlideEnabled = false
         stopInfiniteSlide()
     end,
     SetFriction = function(v)
         slideFrictionValue = v
+    end,
+    IsEnabled = function()
+        return infiniteSlideEnabled
+    end,
+    IsApplying = function()
+        if not infiniteSlideEnabled then return false end
+        local char = getLocalChar()
+        if not char or not char.State then return false end
+        return slideStates[char.State.State] == true
     end,
 }
 
@@ -2584,6 +2809,7 @@ do
             Duration = 5
         })
     else
+        getgenv().AutoJump = AutoJump
         AutoJump.Init(createGradientButton)
     end
 end
@@ -2740,38 +2966,6 @@ JumpCooldownInput = MiscTab:AddInput("JumpCooldownInput", {
         local num = tonumber(Value)
         if num and num > 0 and AutoJump then
             AutoJump.SetCooldown(num)
-        end
-    end
-})
-
-AutoJumpResetButton = MiscTab:AddButton({
-    Title = "Reset Speed",
-    Description = "Reset friction to default (5) and re-apply on next jump",
-    Callback = function()
-        if AutoJump then
-            AutoJump.ResetSpeed()
-            Fluent:Notify({
-                Title = "Auto Jump",
-                Content = "Speed reset to default",
-                Duration = 2
-            })
-        end
-    end
-})
-
-AutoJumpResetKeybind = MiscTab:AddKeybind("AutoJumpResetKeybind", {
-    Title = "Reset Speed Keybind",
-    Mode = "Toggle",
-    Default = "K",
-    ChangedCallback = function(New) end,
-    Callback = function()
-        if AutoJump then
-            AutoJump.ResetSpeed()
-            Fluent:Notify({
-                Title = "Auto Jump",
-                Content = "Speed reset to default (K)",
-                Duration = 2
-            })
         end
     end
 })
@@ -3896,6 +4090,34 @@ CarryButtonSizeInput = SettingsTab:AddInput("CarryButtonSizeInput", {
             if existingScreenGui then
                 local button = existingScreenGui:FindFirstChild("GradientBtn")
                 if button then
+                    local newWidth = math.max(150, math.min(size, 400))
+                    local newHeight = math.max(60, math.min(size * 0.4, 160))
+                    button.Size = UDim2.new(0, newWidth, 0, newHeight)
+                end
+            end
+        end
+    end
+})
+
+AutoReviveButtonSizeInput = SettingsTab:AddInput("AutoReviveButtonSizeInput", {
+    Title = "Auto Revive Button Size",
+    Default = "180",
+    Placeholder = "Enter size (150-400)",
+    Numeric = true,
+    Finished = false,
+    Callback = function(Value)
+        if Value and tonumber(Value) then
+            local size = tonumber(Value)
+            local CoreGui = game:GetService("CoreGui")
+            local existingScreenGui = CoreGui:FindFirstChild("AutoReviveButtonGUI")
+
+            if existingScreenGui then
+                local button = existingScreenGui:FindFirstChild("GradientBtn")
+                if button then
+                    local uiScale = button:FindFirstChild("UIScale")
+                    if uiScale then
+                        uiScale:Destroy()
+                    end
                     local newWidth = math.max(150, math.min(size, 400))
                     local newHeight = math.max(60, math.min(size * 0.4, 160))
                     button.Size = UDim2.new(0, newWidth, 0, newHeight)
