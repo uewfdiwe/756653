@@ -97,11 +97,11 @@ function module.SetDelay(delay)
 end
 
 function module.SetRange(range)
-    CONFIG.Range = tonumber(range) or 15
+    CONFIG.Range = tonumber(range) or 10
 end
 
 function module.SetCooldown(cooldown)
-    CONFIG.ReviveCooldown = tonumber(cooldown) or 2
+    CONFIG.ReviveCooldown = tonumber(cooldown) or 1.5
 end
 
 return module
