@@ -3,6 +3,7 @@ local module = {}
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local CharacterService = require(ReplicatedStorage.Services.Asset.CharacterService)
 
@@ -17,7 +18,11 @@ local CONFIG = {
 
 local enabled = false
 local handle = nil
+local holdConnection = nil
 local currentlyReviving = {}
+local holdPosition = nil
+local holdEnabled = false
+local teleportingToTarget = false
 
 local function getInteractEvent()
     local events = ReplicatedStorage:FindFirstChild("Events")
@@ -108,29 +113,62 @@ local function teleportTo(pos)
     end)
 end
 
-local function teleportToPlatform()
+local function getPlatformPosition()
     local secPart = getSecurityPart()
-    if not secPart then return end
-    teleportTo(secPart.Position + Vector3.new(0, CONFIG.PlatformOffset, 0))
+    if not secPart then return nil end
+    return secPart.Position + Vector3.new(0, CONFIG.PlatformOffset, 0)
+end
+
+local function startHold()
+    if holdConnection then return end
+    holdEnabled = true
+
+    holdConnection = RunService.Heartbeat:Connect(function()
+        if not enabled or not holdEnabled then return end
+        if teleportingToTarget then return end
+
+        local platformPos = getPlatformPosition()
+        if not platformPos then return end
+
+        local hrp = getLocalHRP()
+        if hrp then
+            pcall(function()
+                hrp.CFrame = CFrame.new(platformPos)
+                hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                hrp.Velocity = Vector3.new(0, 0, 0)
+            end)
+        end
+    end)
+end
+
+local function stopHold()
+    holdEnabled = false
+    if holdConnection then
+        holdConnection:Disconnect()
+        holdConnection = nil
+    end
 end
 
 local function findNearestDowned()
     local myHrp = getLocalHRP()
     if not myHrp then return nil end
-    
+
+    local platformPos = getPlatformPosition()
+    local basePos = platformPos or myHrp.Position
+
     local playersFolder = Workspace:FindFirstChild("Players")
     if not playersFolder then return nil end
-    
+
     local nearest = nil
-    local nearestDist = math.huge
-    
+    local nearestDist = CONFIG.Range
+
     for _, otherChar in ipairs(playersFolder:GetChildren()) do
         if otherChar.Name ~= LocalPlayer.Name and otherChar:IsA("Model") then
             local tag = otherChar:GetAttribute("Tag")
             local otherHrp = otherChar:FindFirstChild("HumanoidRootPart")
-            
+
             if tag and otherHrp and isDowned(otherChar) then
-                local dist = (myHrp.Position - otherHrp.Position).Magnitude
+                local dist = (basePos - otherHrp.Position).Magnitude
                 if dist < nearestDist then
                     nearest = {
                         tag = tag,
@@ -142,7 +180,7 @@ local function findNearestDowned()
             end
         end
     end
-    
+
     return nearest
 end
 
@@ -159,25 +197,26 @@ end
 
 local function updateLoop()
     if not enabled then return end
-    
+
     local interactEvent = getInteractEvent()
     local remote = getSetPlayerModeRemote()
-    
+
     if getLocalState() == "Downed" then
         if remote then
             pcall(function() remote:FireServer(true) end)
         end
         task.wait(0.5)
-        teleportToPlatform()
         return
     end
-    
+
     local target = findNearestDowned()
-    
+
     if target then
+        teleportingToTarget = true
+
         local undergroundPos = target.pos - Vector3.new(0, CONFIG.UndergroundOffset, 0)
         teleportTo(undergroundPos)
-        
+
         if not currentlyReviving[target.tag] then
             currentlyReviving[target.tag] = true
             task.spawn(function()
@@ -186,8 +225,8 @@ local function updateLoop()
                 currentlyReviving[target.tag] = nil
             end)
         end
-    else
-        teleportToPlatform()
+
+        teleportingToTarget = false
     end
 end
 
@@ -195,6 +234,9 @@ function module.Start()
     if enabled then return end
     enabled = true
     currentlyReviving = {}
+
+    startHold()
+
     handle = task.spawn(function()
         while enabled do
             pcall(updateLoop)
@@ -209,8 +251,8 @@ function module.Stop()
         task.cancel(handle)
         handle = nil
     end
+    stopHold()
     currentlyReviving = {}
-    teleportToPlatform()
 end
 
 function module.SetRange(range)
