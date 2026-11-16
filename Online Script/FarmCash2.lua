@@ -10,7 +10,7 @@ local CharacterService = require(ReplicatedStorage.Services.Asset.CharacterServi
 local CONFIG = {
     Range = 10,
     LoopDelay = 0.1,
-    ReviveDelay = 0.3,
+    ReviveDelay = 1.5,
     ReviveCooldown = 0.5,
     UndergroundOffset = 4,
     PlatformOffset = 3,
@@ -258,7 +258,7 @@ function module.Stop()
 end
 
 function module.SetRange(range)
-    CONFIG.Range = tonumber(range) or 1000
+    CONFIG.Range = tonumber(range) or 10
 end
 
 function module.SetDelay(delay)
