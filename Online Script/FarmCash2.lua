@@ -7,7 +7,7 @@ local RunService = game:GetService("RunService")
 local CharacterService = require(ReplicatedStorage.Services.Asset.CharacterService)
 
 local CONFIG = {
-    UnderOffset = Vector3.new(0, -5, 0),
+    UnderOffset = Vector3.new(0, -4, 0), 
     ReviveDelay = 2,
     LoopDelay = 0.1
 }
@@ -99,16 +99,10 @@ end
 local function farmLoop()
     while enabled do
         local myState = getMyState()
-        local myHRP = getHRP()
         
-        if not myHRP then
-            task.wait(CONFIG.LoopDelay)
-            continue
-        end
-
-        -- Если я упал, ставим флаг занятости и ревайвим себя
+        -- 1. Если Я упал
         if myState == "Downed" then
-            getgenv().FarmCashBusy = true
+            getgenv().FarmCashBusy = true 
             local myTag = nil
             pcall(function()
                 local myChar = CharacterService:GetLocalCharacter()
@@ -134,9 +128,9 @@ local function farmLoop()
             continue
         end
 
-        -- Если есть цель (упавший игрок)
+        -- 2. Если есть цель (упавший игрок)
         if activeTarget then
-            getgenv().FarmCashBusy = true -- Блокируем платформу
+            getgenv().FarmCashBusy = true 
             local targetTag = activeTarget.tag
             local targetChar = getCharacterByTag(targetTag)
             
@@ -149,42 +143,43 @@ local function farmLoop()
             end
             
             if isStillDowned then
-                -- Держим под игроком
                 local targetHRP = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
                 if targetHRP then
                     teleportTo(targetHRP.Position + CONFIG.UnderOffset, true)
                 end
             else
-                -- Цель встала! Отпускаем флаг и возвращаемся
                 activeTarget = nil
                 getgenv().FarmCashBusy = false
                 teleportTo(getPlatformPos(), true)
             end
         else
-            -- Ищем упавших других игроков
+            -- 3. Ищем упавших других игроков
             local targetPos, targetTag = findDownedPlayer()
             
             if targetPos and targetTag then
-                getgenv().FarmCashBusy = true -- Блокируем платформу
+                getgenv().FarmCashBusy = true 
                 activeTarget = { tag = targetTag }
                 currentlyReviving[targetTag] = true
                 
                 teleportTo(targetPos + CONFIG.UnderOffset, true)
                 
                 task.spawn(function()
-                    -- ЖДЕМ 1 СЕКУНДУ перед ревайвом, чтобы успеть долететь до земли
-                    task.wait(0.5) 
+                    task.wait(0.1)
                     
                     if interactEvent then
+                        -- СНАЧАЛА TRUE
                         pcall(function() interactEvent:FireServer("Revive", targetTag, true) end)
+                        
+                        -- ЖДЕМ 2 СЕКУНДЫ
                         task.wait(CONFIG.ReviveDelay)
+                        
+                        -- ПОТОМ БЕЗ TRUE
                         pcall(function() interactEvent:FireServer("Revive", targetTag) end)
                     end
                     task.wait(3)
                     currentlyReviving[targetTag] = nil
                 end)
             else
-                -- Нет целей — отпускаем флаг, платформа снова работает
                 getgenv().FarmCashBusy = false
                 teleportTo(getPlatformPos(), true)
             end
