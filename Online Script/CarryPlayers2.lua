@@ -21,7 +21,7 @@ local started = false
 local enabled = false
 local isCarrying = false
 
-local ATTEMPT_COOLDOWN = 3
+local ATTEMPT_COOLDOWN = 0.5
 local lastAttempts = {}
 
 local carryStates = {
@@ -109,9 +109,9 @@ local function startAutoCarry()
                                 if dist <= 20 then
                                     lastAttempts[otherTag] = now
                                     if InteractRemote then
-                                        pcall(function()
-                                            InteractRemote:FireServer("Carry", otherTag)
-                                        end)
+                                        InteractRemote:FireServer("Carry", otherTag)
+                                        task.wait(0.05)
+                                        InteractRemote:FireServer("Carry", otherTag, true)
                                     end
                                     return
                                 end
