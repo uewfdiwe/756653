@@ -20,10 +20,7 @@ local carryWeldConnection = nil
 local started = false
 local enabled = false
 local isCarrying = false
-local lastTarget = nil
-local lastTargetTime = 0
-
-local ATTEMPT_COOLDOWN = 1.0
+local currentCarryTarget = nil
 
 local carryStates = {
     CarryIdle = true,
@@ -74,20 +71,23 @@ local function startAutoCarry()
         AutoCarryConnection = nil
     end
 
-    lastTarget = nil
-    lastTargetTime = 0
-
     AutoCarryConnection = RunService.Heartbeat:Connect(function()
         if not enabled then
             return
         end
 
-        if isCarryingPlayer() then
-            lastTarget = nil
+        -- Уже несёшь — не искать других
+        if isCarrying or isCarryingPlayer() then
             return
         end
 
+        -- Уже в Carry-state — не искать
         if isInCarryState() then
+            return
+        end
+
+        -- Уже есть цель — не искать
+        if currentCarryTarget then
             return
         end
 
@@ -98,8 +98,6 @@ local function startAutoCarry()
             local playersFolder = Workspace:FindFirstChild("Players")
             if not playersFolder then return end
 
-            local now = tick()
-
             for _, otherChar in ipairs(playersFolder:GetChildren()) do
                 if otherChar.Name ~= player.Name then
                     local otherTag = otherChar:GetAttribute("Tag")
@@ -108,14 +106,18 @@ local function startAutoCarry()
                         if otherHrp then
                             local dist = (hrp.Position - otherHrp.Position).Magnitude
                             if dist <= 20 then
-                                if lastTarget ~= otherTag or now - lastTargetTime >= ATTEMPT_COOLDOWN then
-                                    lastTarget = otherTag
-                                    lastTargetTime = now
-                                    if InteractRemote then
-                                        InteractRemote:FireServer("Carry", otherTag)
-                                    end
+                                if InteractRemote then
+                                    InteractRemote:FireServer("Carry", otherTag)
+                                    currentCarryTarget = otherTag
+                                    -- Ждём 0.5 сек — если не сработало, сбрасываем
+                                    task.delay(0.5, function()
+                                        if not isCarryingPlayer() and not isInCarryState() then
+                                            currentCarryTarget = nil
+                                        end
+                                    end)
                                     return
                                 end
+                                task.wait(0.01)
                             end
                         end
                     end
@@ -131,8 +133,7 @@ local function stopAutoCarry()
         AutoCarryConnection = nil
     end
     isCarrying = false
-    lastTarget = nil
-    lastTargetTime = 0
+    currentCarryTarget = nil
 end
 
 local function updateButtonText(btn)
@@ -221,16 +222,13 @@ local function setupCarryWeldListener()
         carryWeldConnection = char.ChildAdded:Connect(function(child)
             if child.Name == "CarryWeld" then
                 isCarrying = true
-                lastTarget = nil
-                lastTargetTime = 0
             end
         end)
 
         carryWeldConnection = char.ChildRemoved:Connect(function(child)
             if child.Name == "CarryWeld" then
                 isCarrying = false
-                lastTarget = nil
-                lastTargetTime = 0
+                currentCarryTarget = nil
             end
         end)
     end
