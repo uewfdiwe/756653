@@ -6,9 +6,9 @@ local LocalPlayer = Players.LocalPlayer
 local CharacterService = require(ReplicatedStorage.Services.Asset.CharacterService)
 
 local CONFIG = {
-    Range = 15,
+    Range = 10,
     LoopDelay = 0.15,
-    ReviveCooldown = 2
+    ReviveCooldown = 1.5
 }
 
 local enabled = false
