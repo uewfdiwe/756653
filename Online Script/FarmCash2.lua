@@ -8,10 +8,10 @@ local LocalPlayer = Players.LocalPlayer
 local CharacterService = require(ReplicatedStorage.Services.Asset.CharacterService)
 
 local CONFIG = {
-    Range = 10,
+    Range = 1000,
     LoopDelay = 0.1,
-    ReviveDelay = 1.5,
-    ReviveCooldown = 1.0,
+    ReviveDelay = 0.3,
+    ReviveCooldown = 0.5,
     UndergroundOffset = 4,
     PlatformOffset = 3,
 }
@@ -20,7 +20,6 @@ local enabled = false
 local handle = nil
 local holdConnection = nil
 local currentlyReviving = {}
-local holdPosition = nil
 local holdEnabled = false
 local teleportingToTarget = false
 
@@ -119,6 +118,7 @@ local function getPlatformPosition()
     return secPart.Position + Vector3.new(0, CONFIG.PlatformOffset, 0)
 end
 
+-- Удержание на платформе
 local function startHold()
     if holdConnection then return end
     holdEnabled = true
@@ -153,14 +153,11 @@ local function findNearestDowned()
     local myHrp = getLocalHRP()
     if not myHrp then return nil end
 
-    local platformPos = getPlatformPosition()
-    local basePos = platformPos or myHrp.Position
-
     local playersFolder = Workspace:FindFirstChild("Players")
     if not playersFolder then return nil end
 
     local nearest = nil
-    local nearestDist = CONFIG.Range
+    local nearestDist = math.huge
 
     for _, otherChar in ipairs(playersFolder:GetChildren()) do
         if otherChar.Name ~= LocalPlayer.Name and otherChar:IsA("Model") then
@@ -168,7 +165,7 @@ local function findNearestDowned()
             local otherHrp = otherChar:FindFirstChild("HumanoidRootPart")
 
             if tag and otherHrp and isDowned(otherChar) then
-                local dist = (basePos - otherHrp.Position).Magnitude
+                local dist = (myHrp.Position - otherHrp.Position).Magnitude
                 if dist < nearestDist then
                     nearest = {
                         tag = tag,
@@ -226,6 +223,7 @@ local function updateLoop()
             end)
         end
 
+        task.wait(0.2)
         teleportingToTarget = false
     end
 end
@@ -256,15 +254,15 @@ function module.Stop()
 end
 
 function module.SetRange(range)
-    CONFIG.Range = tonumber(range) or 10
+    CONFIG.Range = tonumber(range) or 1000
 end
 
 function module.SetDelay(delay)
-    CONFIG.LoopDelay = tonumber(delay) or 1.5
+    CONFIG.LoopDelay = tonumber(delay) or 0.1
 end
 
 function module.SetCooldown(cooldown)
-    CONFIG.ReviveCooldown = tonumber(cooldown) or 1.0
+    CONFIG.ReviveCooldown = tonumber(cooldown) or 0.5
 end
 
 function module.SetUndergroundOffset(offset)
