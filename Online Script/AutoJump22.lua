@@ -53,6 +53,33 @@ local wallJumpStates = {
     WallrunningRight = true,
 }
 
+local function normalizeOriginal(original)
+    if type(original) ~= "number" or original < 1 then
+        return DEFAULT_FRICTION
+    end
+    return original
+end
+
+local function getLiveMoveStats()
+    local char = CharacterService:GetLocalCharacter()
+    if not char or not char.Movement or not char.Movement.MoveStats then return nil end
+    local ms = char.Movement.MoveStats
+    local target = ms.MoveStats or ms
+    if target and type(target) == "table" and target.Friction ~= nil then
+        return target
+    end
+    return nil
+end
+
+local function slideOwnsFriction()
+    local api = rawget(getgenv(), "InfiniteSlide")
+    if type(api) ~= "table" or type(api.IsApplying) ~= "function" then
+        return false
+    end
+    local ok, applying = pcall(api.IsApplying)
+    return ok and applying == true
+end
+
 local function findFrictionTables()
     local now = tick()
     if now - refs.lastFrictionScanTime < FRICTION_SCAN_INTERVAL and #refs.frictionTables > 0 then return end
@@ -62,33 +89,25 @@ local function findFrictionTables()
 
     for _, obj in pairs(getgc(true)) do
         if type(obj) == "table" and rawget(obj, "Friction") then
-            local original = obj.Friction
-            if original == -0.5 then original = DEFAULT_FRICTION end
-            table.insert(refs.frictionTables, { obj = obj, original = original })
+            table.insert(refs.frictionTables, { obj = obj, original = normalizeOriginal(obj.Friction) })
         end
     end
 
-    local char = CharacterService:GetLocalCharacter()
-    if char and char.Movement then
-        local ms = char.Movement.MoveStats
-        if ms then
-            local target = ms.MoveStats or ms
-            if target and type(target) == "table" and target.Friction ~= nil then
-                local original = target.Friction
-                if original == -0.5 then original = DEFAULT_FRICTION end
-                local exists = false
-                for _, t in ipairs(refs.frictionTables) do
-                    if t.obj == target then exists = true; break end
-                end
-                if not exists then
-                    table.insert(refs.frictionTables, { obj = target, original = original })
-                end
-            end
+    local target = getLiveMoveStats()
+    if target then
+        local exists = false
+        for _, t in ipairs(refs.frictionTables) do
+            if t.obj == target then exists = true; break end
+        end
+        if not exists then
+            table.insert(refs.frictionTables, { obj = target, original = normalizeOriginal(target.Friction) })
         end
     end
 end
 
 local function applyBhopFriction()
+    if slideOwnsFriction() then return end
+
     local isActive = state.autoJumpEnabled or state.bhopHoldActive or state.realisticPCEnabled
 
     if #refs.frictionTables == 0 then findFrictionTables() end
@@ -118,20 +137,29 @@ local function writeDefaultFriction(obj)
     end
 end
 
-local function resetSpeedTable()
-    for _, tableData in ipairs(refs.frictionTables) do
-        writeDefaultFriction(tableData.obj)
-        tableData.original = DEFAULT_FRICTION
-    end
+local function writeLiveFriction(value)
+    local target = getLiveMoveStats()
+    if not target then return end
+    pcall(function()
+        target.Friction = value
+    end)
+end
 
-    local char = CharacterService:GetLocalCharacter()
-    if char and char.Movement and char.Movement.MoveStats then
-        local ms = char.Movement.MoveStats
-        writeDefaultFriction(ms.MoveStats or ms)
+local function resetSpeedTable()
+    local sliding = slideOwnsFriction()
+    for _, tableData in ipairs(refs.frictionTables) do
+        tableData.original = DEFAULT_FRICTION
+        if not sliding then
+            writeDefaultFriction(tableData.obj)
+        end
+    end
+    if not sliding then
+        writeLiveFriction(DEFAULT_FRICTION)
     end
 end
 
 local function forceAccelerationFriction()
+    if slideOwnsFriction() then return end
     local value = state.bhopAccelValue or -0.5
     if #refs.frictionTables == 0 then findFrictionTables() end
     for _, tableData in ipairs(refs.frictionTables) do
@@ -501,6 +529,7 @@ end
 
 function AutoJump.SetAcceleration(value)
     state.bhopAccelValue = value
+    if slideOwnsFriction() then return end
     if #refs.frictionTables == 0 then findFrictionTables() end
     if state.autoJumpEnabled or state.bhopHoldActive or state.realisticPCEnabled then
         for _, t in ipairs(refs.frictionTables) do
@@ -519,6 +548,43 @@ end
 
 function AutoJump.IsEnabled()
     return state.autoJumpEnabled
+end
+
+function AutoJump.IsFrictionActive()
+    return state.autoJumpEnabled or state.bhopHoldActive or state.realisticPCEnabled
+end
+
+function AutoJump.GetAcceleration()
+    return state.bhopAccelValue or -0.5
+end
+
+function AutoJump.ReapplyAcceleration()
+    if not AutoJump.IsFrictionActive() or slideOwnsFriction() then return end
+    local value = state.bhopAccelValue or -0.5
+    for _, tableData in ipairs(refs.frictionTables) do
+        if tableData.obj and type(tableData.obj) == "table" then
+            pcall(function()
+                tableData.obj.Friction = value
+            end)
+        end
+    end
+    writeLiveFriction(value)
+end
+
+function AutoJump.SetExternalFriction(value)
+    if type(value) ~= "number" then return end
+    for _, tableData in ipairs(refs.frictionTables) do
+        if tableData.obj and type(tableData.obj) == "table" then
+            pcall(function()
+                tableData.obj.Friction = value
+            end)
+        end
+    end
+    writeLiveFriction(value)
+end
+
+function AutoJump.ResetFriction()
+    resetSpeedTable()
 end
 
 function AutoJump.CreateButton(parent, position, size, text, onClick)
