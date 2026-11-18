@@ -958,7 +958,6 @@ local function getLocalState()
     return nil
 end
 
--- ⚡ Проверка: Downed ИЛИ Ragdolling
 local function isDownedOrRagdolling()
     local state = getLocalState()
     if not state then return false end
@@ -994,12 +993,17 @@ local function getLocalHRP()
     return nil
 end
 
+local function isValidPosition(pos)
+    if typeof(pos) ~= "Vector3" then return false end
+    if pos.X ~= pos.X or pos.Y ~= pos.Y or pos.Z ~= pos.Z then return false end
+    if pos.Magnitude < 0.1 then return false end
+    return true
+end
+
 RunService.Heartbeat:Connect(function()
     local hrp = getLocalHRP()
-    if hrp then
-        if not isDownedOrRagdolling() then
-            getgenv().lastSavedPosition = hrp.Position
-        end
+    if hrp and isValidPosition(hrp.Position) then
+        getgenv().lastSavedPosition = hrp.Position
     end
 end)
 
@@ -1011,16 +1015,14 @@ end
 
 local function doFakeRevive()
     local savedPos = getgenv().lastSavedPosition
-    if not savedPos then
-        pcall(function()
-            game:GetService("ReplicatedStorage").Remotes.Session.SetPlayerMode:FireServer(true)
-        end)
-        return
-    end
 
     pcall(function()
         game:GetService("ReplicatedStorage").Remotes.Session.SetPlayerMode:FireServer(true)
     end)
+
+    if not savedPos then
+        return
+    end
 
     task.wait(1)
 
@@ -1079,7 +1081,6 @@ RespawnButton = Tabs.Main:AddButton({
     Title = "Respawn Button",
     Callback = function()
         local CoreGui = game:GetService("CoreGui")
-        local LocalPlayer = game:GetService("Players").LocalPlayer
 
         local existingScreenGui = CoreGui:FindFirstChild("DraconicRespawnButtonGUI")
 
