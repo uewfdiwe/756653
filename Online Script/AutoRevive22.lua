@@ -36,27 +36,34 @@ end
 
 local interactEvent = getInteractEvent()
 
-local function isInCarryState()
+local function getLocalState()
     local char = CharacterService:GetLocalCharacter()
     if char and char.State then
-        local s = char.State.State
-        if s and carryStates[s] then
-            return true
-        end
+        return char.State.State
     end
-    return false
+    return nil
+end
+
+local function isInCarryState()
+    local s = getLocalState()
+    if not s then return false end
+    return carryStates[s] == true
+end
+
+local function shouldBlockRevive()
+    return CONFIG.IgnoreCarry and isInCarryState()
 end
 
 local function reviveLoop()
     while enabled do
-        local myChar = LocalPlayer.Character
-        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-
-        if CONFIG.IgnoreCarry and isInCarryState() then
+        if shouldBlockRevive() then
             task.wait(CONFIG.LoopDelay)
             continue
         end
-        
+
+        local myChar = LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
         if myHRP then
             local playersFolder = Workspace:FindFirstChild("Players")
             if playersFolder then
@@ -64,31 +71,37 @@ local function reviveLoop()
                     if otherChar.Name ~= LocalPlayer.Name and otherChar:IsA("Model") then
                         local otherTag = otherChar:GetAttribute("Tag")
                         local otherHrp = otherChar:FindFirstChild("HumanoidRootPart")
-                        
+
                         if otherTag and otherHrp and not currentlyReviving[otherTag] then
                             local dist = (myHRP.Position - otherHrp.Position).Magnitude
-                            
+
                             if dist <= CONFIG.Range then
                                 local charData = CharacterService:GetCharacterFromTag(otherTag)
-                                
+
                                 if charData and charData.State and charData.State.State == "Downed" then
                                     currentlyReviving[otherTag] = true
-                                    
+
                                     task.spawn(function()
-                                        if interactEvent then
+                                        -- 1. Первый FireServer (true)
+                                        if not shouldBlockRevive() and interactEvent then
                                             pcall(function()
                                                 interactEvent:FireServer("Revive", otherTag, true)
                                             end)
+                                        else
+                                            currentlyReviving[otherTag] = nil
+                                            return
                                         end
-                                        
+
+                                        -- Ждём
                                         task.wait(CONFIG.ReviveCooldown)
-                                        
-                                        if interactEvent then
+
+                                        -- 2. Второй FireServer — только если не в Carry
+                                        if not shouldBlockRevive() and interactEvent then
                                             pcall(function()
                                                 interactEvent:FireServer("Revive", otherTag)
                                             end)
                                         end
-                                        
+
                                         task.wait(1)
                                         currentlyReviving[otherTag] = nil
                                     end)
@@ -99,7 +112,7 @@ local function reviveLoop()
                 end
             end
         end
-        
+
         task.wait(CONFIG.LoopDelay)
     end
 end
