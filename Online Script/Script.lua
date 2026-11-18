@@ -1890,6 +1890,16 @@ AutoReviveToggle = MiscTab:AddToggle("AutoReviveToggle", {
     end
 })
 
+AutoReviveIgnoreCarryToggle = MiscTab:AddToggle("AutoReviveIgnoreCarryToggle", {
+    Title = "Disable Revive in Carry",
+    Default = false,
+    Callback = function(Value)
+        if AutoRevive and AutoRevive.SetIgnoreCarry then
+            AutoRevive.SetIgnoreCarry(Value)
+        end
+    end
+})
+
 local autoReviveButtonScreenGui = nil
 local autoReviveButtonState = false
 
