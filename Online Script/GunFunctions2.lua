@@ -80,7 +80,7 @@ function GunFunctions.breacher()
         and portalTask.Functions[2].Activations[1].Methods[1]
 
     if blueShoot and blueShoot.Info then
-        blueShoot.Info.Range = 999999
+        blueShoot.Info.Range = 1000
         blueShoot.Info.SpreadIncrease = 0
         blueShoot.Info.Cooldown = 0.05
         blueShoot.GlobalPriority = 500
@@ -89,7 +89,7 @@ function GunFunctions.breacher()
     end
 
     if yellowShoot and yellowShoot.Info then
-        yellowShoot.Info.Range = 999999
+        yellowShoot.Info.Range = 1000
         yellowShoot.Info.SpreadIncrease = 0
         yellowShoot.Info.Cooldown = 0.05
         yellowShoot.GlobalPriority = 500
