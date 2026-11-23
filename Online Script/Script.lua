@@ -22,7 +22,7 @@ local Window = Fluent:CreateWindow({
     SearchInHeader = true,
     TitleIcon = "rbxassetid://102225156206159",
     UserInfoTop = true,
-    UserInfoTitle = "NEW  UPDATE?",
+    UserInfoTitle = "NEW UPDATE?",
     MinimizeKey = Enum.KeyCode.LeftControl,
 })
 
