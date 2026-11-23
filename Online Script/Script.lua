@@ -991,6 +991,32 @@ LeaderboardToggle = Tabs.Main:AddButton({
     end
 })
 
+Tabs.Main:AddButton({
+    Title = "Unlocked Fe BoomBox",
+    Callback = function()
+        local url = "https://darahub.pages.dev/api/script/obfuscated/Fe/Boomboxs/EvadeOverhaul-RelicsXYZ.lua"
+        
+        local success, err = pcall(function()
+            local source = game:HttpGet(url, true)
+            loadstring(source)()
+        end)
+        
+        if not success then
+            Fluent:Notify({
+                Title = "RelicsXYZ",
+                Content = "Failed to load: " .. tostring(err),
+                Duration = 5
+            })
+        else
+            Fluent:Notify({
+                Title = "RelicsXYZ",
+                Content = "Loaded successfully!",
+                Duration = 3
+            })
+        end
+    end
+})
+
 if not workspace:FindFirstChild("SecurityPart") then
     local SecurityPart = Instance.new("Part")
     SecurityPart.Name = "SecurityPart"
