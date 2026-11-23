@@ -260,17 +260,27 @@ local function IsOnGround()
     local Humanoid = refs.Humanoid
     local HRP = refs.HumanoidRootPart
 
+    local grounded = nil
+    local gameChar = CharacterService:GetLocalCharacter()
+    if gameChar and gameChar.DataRegistry then
+        grounded = gameChar.DataRegistry:Get("Grounded")
+        if grounded == true then return true end
+    end
+
     local ok, s = pcall(function()
         return Humanoid:GetState()
     end)
     if not ok then return false end
-    if s == Enum.HumanoidStateType.Jumping or
-       s == Enum.HumanoidStateType.Freefall or
-       s == Enum.HumanoidStateType.Swimming then
+    if s == Enum.HumanoidStateType.Jumping or s == Enum.HumanoidStateType.Swimming then
         return false
     end
-    if s == Enum.HumanoidStateType.Running then
+    if s == Enum.HumanoidStateType.Running
+        or s == Enum.HumanoidStateType.Landed
+        or s == Enum.HumanoidStateType.RunningNoPhysics then
         return true
+    end
+    if grounded == false and s == Enum.HumanoidStateType.Freefall then
+        return false
     end
 
     local rayOrigin = HRP.Position
@@ -295,10 +305,18 @@ local function IsOnGround()
 end
 
 local function doJumpBounce()
-    if not refs.Humanoid then return end
-    pcall(function()
-        refs.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-    end)
+    local char = CharacterService:GetLocalCharacter()
+    if char and char.Movement and char.Movement.Jump then
+        local ok = pcall(function()
+            char.Movement:Jump(nil, true)
+        end)
+        if ok then return end
+    end
+    if refs.Humanoid then
+        pcall(function()
+            refs.Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+        end)
+    end
 end
 
 local function updateBhop()
